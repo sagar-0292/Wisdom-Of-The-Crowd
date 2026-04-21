@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pulse.IN — Market Intelligence</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-font-smoothing:antialiased;}
+:root{
+  --ink:#0a0a0a;--ink2:#1a1a1a;--ink3:#2e2e2e;
+  --mid:#6b6b6b;--dim:#9a9a9a;--faint:#d4d4d4;--line:#e8e8e8;
+  --paper:#f9f8f6;--white:#fff;
+  --accent:#00704a;--accent-lt:#e6f2ec;
+  --loss:#b5291c;--loss-lt:#fdf0ee;
+  --caution:#8b6914;--caution-lt:#fdf7e8;
+  --groq:#f55036;--groq-lt:#fff2f0;--groq-border:rgba(245,80,54,.22);
+  --plex:'IBM Plex Mono',monospace;
+  --serif:'Playfair Display',serif;
+  --sans:'IBM Plex Sans',sans-serif;
+}
+body{font-family:var(--sans);background:var(--paper);color:var(--ink);min-height:100vh;}
+.app-header{background:var(--ink);border-bottom:1px solid #1a1a1a;}
+.header-main{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;}
+.brand{font-family:var(--serif);font-size:24px;font-weight:700;color:#fff;letter-spacing:-.5px;}
+.brand em{color:var(--accent);font-style:normal;}
+.header-right{display:flex;align-items:center;gap:14px;}
+.groq-badge{display:flex;align-items:center;gap:7px;background:rgba(245,80,54,.1);border:1px solid var(--groq-border);padding:5px 12px;}
+.groq-dot{width:6px;height:6px;border-radius:50%;background:var(--groq);animation:glow 2s infinite;}
+@keyframes glow{0%,100%{opacity:1;}50%{opacity:.4;}}
+.groq-status{font-family:var(--plex);font-size:9px;color:var(--groq);letter-spacing:1.5px;text-transform:uppercase;}
+.api-btn{font-family:var(--plex);font-size:8px;color:#fff;letter-spacing:1.5px;text-transform:uppercase;background:var(--groq);border:none;padding:7px 14px;cursor:pointer;}
+.ticker-bar{display:flex;background:#111;border-top:1px solid #1a1a1a;overflow-x:auto;}
+.ticker-bar::-webkit-scrollbar{display:none;}
+.tk{padding:8px 16px;border-right:1px solid #1a1a1a;flex-shrink:0;}
+.tk-n{font-family:var(--plex);font-size:7px;color:#444;letter-spacing:1px;text-transform:uppercase;}
+.tk-v{font-family:var(--plex);font-size:12px;font-weight:500;margin-top:2px;}
+.tk-c{font-family:var(--plex);font-size:9px;margin-top:1px;}
+.g{color:var(--accent);}.r{color:var(--loss);}.n{color:var(--caution);}
+
+/* MODAL */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:100;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px);}
+.modal-overlay.hidden{display:none;}
+.modal{background:var(--white);width:500px;max-width:92vw;padding:36px;}
+.modal-header{display:flex;align-items:center;gap:14px;padding-bottom:20px;border-bottom:1px solid var(--line);margin-bottom:22px;}
+.modal-icon{width:46px;height:46px;background:var(--groq);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.modal-icon svg{width:22px;height:22px;}
+.modal-title{font-family:var(--serif);font-size:22px;font-weight:600;}
+.modal-sub{font-size:12px;color:var(--mid);margin-top:3px;}
+.step{display:flex;gap:12px;margin-bottom:14px;}
+.step-n{width:22px;height:22px;background:var(--ink);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--plex);font-size:10px;flex-shrink:0;margin-top:1px;}
+.step-t{font-size:13px;font-weight:500;margin-bottom:2px;}
+.step-s{font-size:12px;color:var(--mid);line-height:1.5;}
+.step-s a{color:var(--groq);font-weight:500;text-decoration:none;}
+.free-note{background:var(--groq-lt);border:1px solid var(--groq-border);padding:10px 13px;margin:18px 0;}
+.free-note-text{font-family:var(--plex);font-size:9px;color:var(--groq);line-height:1.8;}
+.modal-label{font-family:var(--plex);font-size:8px;color:var(--mid);letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;}
+.modal-input{width:100%;background:var(--paper);border:1px solid var(--line);padding:12px 14px;font-family:var(--plex);font-size:13px;color:var(--ink);outline:none;margin-bottom:14px;}
+.modal-input:focus{border-color:var(--groq);}
+.modal-btn{width:100%;background:var(--groq);color:#fff;border:none;padding:15px;font-family:var(--plex);font-size:10px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;}
+.modal-skip{display:block;text-align:center;margin-top:12px;font-family:var(--plex);font-size:9px;color:var(--dim);cursor:pointer;}
+
+/* LAYOUT */
+.app-body{display:grid;grid-template-columns:1fr 380px;min-height:calc(100vh - 82px);}
+.feed-col{border-right:1px solid var(--line);}
+.side-col{background:var(--white);}
+.sec-hdr{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;border-bottom:1px solid var(--line);background:var(--white);}
+.sec-hdr-l{font-family:var(--plex);font-size:8px;color:var(--mid);letter-spacing:2.5px;text-transform:uppercase;}
+.groq-label{font-family:var(--plex);font-size:7px;color:var(--groq);letter-spacing:1.5px;text-transform:uppercase;background:var(--groq-lt);border:1px solid var(--groq-border);padding:2px 8px;}
+
+/* TOPIC CARD */
+.topic-card{background:var(--white);border-bottom:1px solid var(--line);position:relative;}
+.topic-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;}
+.topic-card.bull::before{background:var(--accent);}
+.topic-card.bear::before{background:var(--loss);}
+.topic-card.neu::before{background:var(--caution);}
+.tc-body{padding:14px 20px 14px 22px;}
+.tc-meta{display:flex;align-items:center;gap:8px;margin-bottom:7px;flex-wrap:wrap;}
+.tc-sig{font-family:var(--plex);font-size:7px;letter-spacing:1.5px;text-transform:uppercase;padding:3px 8px;border:1px solid;}
+.sig-bull{color:var(--accent);border-color:rgba(0,112,74,.3);background:var(--accent-lt);}
+.sig-bear{color:var(--loss);border-color:rgba(181,41,28,.3);background:var(--loss-lt);}
+.sig-neu{color:var(--caution);border-color:rgba(139,105,20,.3);background:var(--caution-lt);}
+.tc-sector{font-family:var(--plex);font-size:7px;color:var(--mid);letter-spacing:1px;text-transform:uppercase;}
+.tc-src{font-family:var(--plex);font-size:7px;color:var(--dim);}
+.tc-title{font-size:14px;font-weight:500;color:var(--ink);line-height:1.5;margin-bottom:10px;}
+
+/* Groq AI Panel */
+.groq-panel{background:rgba(245,80,54,.03);border:1px solid var(--groq-border);padding:11px 13px;margin-bottom:10px;position:relative;}
+.groq-panel::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--groq);}
+.gp-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}
+.gp-lbl{font-family:var(--plex);font-size:7px;color:var(--groq);letter-spacing:2px;text-transform:uppercase;}
+.gp-mdl{font-family:var(--plex);font-size:7px;color:var(--dim);}
+.gp-txt{font-size:12px;color:var(--ink3);line-height:1.7;}
+.gp-load{display:flex;align-items:center;gap:8px;}
+.gp-dots{display:flex;gap:3px;}
+.gp-dot{width:4px;height:4px;border-radius:50%;background:var(--groq);animation:dp 1.2s infinite;}
+.gp-dot:nth-child(2){animation-delay:.15s;}.gp-dot:nth-child(3){animation-delay:.3s;}
+@keyframes dp{0%,80%,100%{opacity:.2;}40%{opacity:1;}}
+.gp-load-txt{font-family:var(--plex);font-size:9px;color:var(--dim);}
+.gp-disc{font-family:var(--plex);font-size:7px;color:var(--dim);margin-top:5px;}
+.gp-err{font-family:var(--plex);font-size:9px;color:var(--loss);margin-top:4px;}
+.no-key{background:var(--groq-lt);border:1px solid var(--groq-border);padding:9px 11px;margin:4px 0;}
+.no-key-txt{font-family:var(--plex);font-size:8px;color:var(--groq);line-height:1.7;}
+
+/* VOTE */
+.vote-section{padding:0 20px 14px 22px;}
+.vote-hint{font-family:var(--plex);font-size:7px;color:var(--dim);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px;}
+.vote-btns{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--line);}
+.vbtn{padding:11px 4px;font-family:var(--plex);font-size:9px;font-weight:500;text-align:center;cursor:pointer;transition:all .12s;letter-spacing:.5px;border:none;}
+.vbull{background:var(--paper);color:var(--accent);}
+.vbear{background:var(--paper);color:var(--loss);}
+.vwtch{background:var(--paper);color:var(--mid);}
+.vbull:hover,.vbull.voted{background:var(--accent);color:#fff;}
+.vbear:hover,.vbear.voted{background:var(--loss);color:#fff;}
+.vwtch:hover,.vwtch.voted{background:var(--ink);color:#fff;}
+.locked{background:var(--paper);border-top:1px solid var(--line);padding:14px 22px;text-align:center;}
+.locked-lbl{font-family:var(--plex);font-size:7px;color:var(--dim);letter-spacing:2px;text-transform:uppercase;margin-bottom:3px;}
+.locked-sub{font-size:11px;color:var(--dim);line-height:1.6;}
+
+/* RESULTS */
+.results-section{padding:10px 20px 14px 22px;}
+.rs-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+.rs-lbl{font-family:var(--plex);font-size:7px;color:var(--accent);letter-spacing:2px;text-transform:uppercase;}
+.rs-yv{font-family:var(--plex);font-size:8px;}
+.sent-bar{height:4px;display:flex;margin-bottom:5px;}
+.sb-b{background:var(--accent);}.sb-r{background:var(--loss);}.sb-w{background:var(--faint);}
+.sent-lbls{display:flex;justify-content:space-between;margin-bottom:12px;}
+.sl{font-family:var(--plex);font-size:9px;}
+.tier-lbl{font-family:var(--plex);font-size:7px;color:var(--dim);letter-spacing:2px;text-transform:uppercase;margin-bottom:7px;}
+.trow{display:flex;align-items:center;gap:8px;margin-bottom:5px;}
+.tnm{font-family:var(--plex);font-size:9px;color:var(--mid);width:44px;}
+.twt{font-family:var(--plex);font-size:7px;color:var(--dim);width:22px;}
+.ttrack{flex:1;height:2px;background:var(--line);}
+.tfill{height:100%;}
+.tpct{font-family:var(--plex);font-size:9px;width:28px;text-align:right;}
+.div-alert{background:var(--caution-lt);border-left:2px solid var(--caution);padding:9px 11px;margin-top:10px;}
+.da-lbl{font-family:var(--plex);font-size:7px;color:var(--caution);letter-spacing:2px;text-transform:uppercase;margin-bottom:3px;}
+.da-txt{font-size:10px;color:var(--ink3);line-height:1.6;}
+
+/* SIDEBAR */
+.side-section{border-bottom:1px solid var(--line);padding:16px 20px;}
+.side-lbl{font-family:var(--plex);font-size:7px;color:var(--mid);letter-spacing:2.5px;text-transform:uppercase;margin-bottom:12px;}
+.ask-hdr{display:flex;align-items:center;gap:8px;padding:11px 14px;border-bottom:1px solid var(--line);background:var(--groq-lt);}
+.ask-hdr-ico{width:22px;height:22px;background:var(--groq);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.ask-hdr-title{font-family:var(--plex);font-size:8px;color:var(--groq);letter-spacing:1.5px;text-transform:uppercase;}
+.ask-textarea{width:100%;background:transparent;border:none;border-bottom:1px solid var(--line);padding:12px 14px;font-family:var(--sans);font-size:13px;color:var(--ink);outline:none;resize:none;min-height:68px;}
+.ask-footer{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;}
+.ask-hint{font-family:var(--plex);font-size:8px;color:var(--dim);}
+.ask-submit{background:var(--groq);color:#fff;border:none;padding:7px 16px;font-family:var(--plex);font-size:8px;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;}
+.ask-submit:disabled{background:var(--faint);cursor:not-allowed;}
+.ask-resp{padding:12px 14px;border-top:1px solid var(--line);background:var(--white);display:none;}
+.ask-resp.show{display:block;}
+.ask-resp-lbl{font-family:var(--plex);font-size:7px;color:var(--groq);letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;}
+.ask-resp-txt{font-size:12px;color:var(--ink3);line-height:1.7;}
+.ask-resp-disc{font-family:var(--plex);font-size:7px;color:var(--dim);margin-top:6px;}
+.risk-top{display:flex;justify-content:space-between;align-items:flex-start;}
+.risk-num{font-family:var(--plex);font-size:28px;font-weight:500;color:var(--loss);line-height:1;}
+.risk-sub{font-family:var(--plex);font-size:8px;color:var(--mid);margin-top:2px;}
+.risk-bar{height:3px;background:var(--line);margin:8px 0 4px;}
+.risk-fill{height:100%;background:linear-gradient(90deg,var(--caution),var(--loss));}
+.risk-zones{display:flex;justify-content:space-between;}
+.rz{font-family:var(--plex);font-size:7px;}
+.geo-event{padding:10px 0;border-bottom:1px solid var(--line);}
+.geo-event:last-child{border-bottom:none;padding-bottom:0;}
+.geo-reg{font-family:var(--plex);font-size:7px;color:var(--dim);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:3px;}
+.geo-title{font-size:12px;font-weight:500;color:var(--ink);line-height:1.4;margin-bottom:5px;}
+.geo-chips{display:flex;gap:5px;flex-wrap:wrap;}
+.gc{font-family:var(--plex);font-size:7px;padding:2px 7px;border:1px solid;}
+.gc-n{color:var(--loss);border-color:rgba(181,41,28,.25);}
+.gc-p{color:var(--accent);border-color:rgba(0,112,74,.25);}
+.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);margin-bottom:12px;}
+.stat{background:var(--white);padding:10px 8px;text-align:center;}
+.stat-val{font-family:var(--plex);font-size:18px;font-weight:500;}
+.stat-key{font-family:var(--plex);font-size:7px;color:var(--mid);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px;}
+@media(max-width:900px){.app-body{grid-template-columns:1fr;}.side-col{border-top:1px solid var(--line);}}
+</style>
+</head>
+<body>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="white" stroke-width="1.8" stroke-linejoin="round" fill="none"/></svg>
+      </div>
+      <div>
+        <div class="modal-title">Connect Groq AI</div>
+        <div class="modal-sub">Free · No credit card · 14,400 requests/day · Ultra-fast</div>
+      </div>
+    </div>
+    <div class="step"><div class="step-n">1</div><div><div class="step-t">Go to Groq Console</div><div class="step-s">Open <a href="https://console.groq.com" target="_blank">console.groq.com</a> and sign up with Google or email — takes 30 seconds</div></div></div>
+    <div class="step"><div class="step-n">2</div><div><div class="step-t">Create a free API key</div><div class="step-s">Left sidebar → API Keys → Create API Key → Copy the key (starts with gsk_...)</div></div></div>
+    <div class="step"><div class="step-n">3</div><div><div class="step-t">Paste it below</div><div class="step-s">Your key is stored only in your browser — never sent anywhere except Groq's servers</div></div></div>
+    <div class="free-note"><div class="free-note-text"><b>100% Free forever.</b> Llama 3.3 70B model · 14,400 requests/day · No credit card · If you hit the limit it just pauses — you are never charged</div></div>
+    <div class="modal-label">Groq API Key</div>
+    <input class="modal-input" type="password" id="api-key-input" placeholder="gsk_...">
+    <button class="modal-btn" onclick="saveKey()">Connect Groq AI — Free</button>
+    <span class="modal-skip" onclick="skipKey()">Continue in demo mode (no key needed)</span>
+  </div>
+</div>
+
+<!-- HEADER -->
+<div class="app-header">
+  <div class="header-main">
+    <div class="brand">PULSE<em>.</em>IN</div>
+    <div class="header-right">
+      <div class="groq-badge"><div class="groq-dot"></div><div class="groq-status" id="groq-status">Groq AI Ready</div></div>
+      <button class="api-btn" onclick="document.getElementById('modal').classList.remove('hidden')">API Key</button>
+    </div>
+  </div>
+  <div class="ticker-bar">
+    <div class="tk"><div class="tk-n">Nifty 50</div><div class="tk-v g">24,318</div><div class="tk-c g">+0.72%</div></div>
+    <div class="tk"><div class="tk-n">Bank Nifty</div><div class="tk-v g">51,240</div><div class="tk-c g">+1.10%</div></div>
+    <div class="tk"><div class="tk-n">Nifty IT</div><div class="tk-v g">37,890</div><div class="tk-c g">+0.93%</div></div>
+    <div class="tk"><div class="tk-n">Nifty FMCG</div><div class="tk-v r">53,120</div><div class="tk-c r">-0.41%</div></div>
+    <div class="tk"><div class="tk-n">USD/INR</div><div class="tk-v r">84.42</div><div class="tk-c r">+0.31%</div></div>
+    <div class="tk"><div class="tk-n">Brent Crude</div><div class="tk-v r">$91.20</div><div class="tk-c r">+2.14%</div></div>
+    <div class="tk"><div class="tk-n">Gold</div><div class="tk-v g">72,340</div><div class="tk-c g">+0.92%</div></div>
+  </div>
+</div>
+
+<div class="app-body">
+  <div class="feed-col">
+    <div class="sec-hdr">
+      <div class="sec-hdr-l">Market Topics — April 21, 2026</div>
+      <div class="groq-label">Groq AI Analysis</div>
+    </div>
+    <div id="feed"></div>
+  </div>
+
+  <div class="side-col">
+    <div class="side-section" style="padding:0;">
+      <div class="ask-hdr">
+        <div class="ask-hdr-ico"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="white" stroke-width="1.8" stroke-linejoin="round"/></svg></div>
+        <div class="ask-hdr-title">Ask Groq about the market</div>
+      </div>
+      <textarea class="ask-textarea" id="ask-input" placeholder="e.g. What is the impact of rising crude oil on Indian aviation stocks?"></textarea>
+      <div class="ask-footer">
+        <div class="ask-hint">Ctrl+Enter to send · Not investment advice</div>
+        <button class="ask-submit" id="ask-btn" onclick="askGroq()">Analyse</button>
+      </div>
+      <div class="ask-resp" id="ask-resp">
+        <div class="ask-resp-lbl">Groq AI Response</div>
+        <div class="ask-resp-txt" id="ask-resp-txt"></div>
+        <div class="ask-resp-disc">Educational context only · Not investment advice · Not SEBI registered · Built with Groq AI</div>
+      </div>
+    </div>
+
+    <div class="side-section">
+      <div class="side-lbl">Geo Risk Index</div>
+      <div class="risk-top">
+        <div><div class="risk-num">68</div><div class="risk-sub">/ 100 Elevated</div></div>
+        <div style="text-align:right;">
+          <div style="font-family:var(--plex);font-size:7px;color:var(--dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:5px;">Active signals</div>
+          <div style="font-family:var(--plex);font-size:11px;color:var(--loss);">3 High Risk</div>
+          <div style="font-family:var(--plex);font-size:11px;color:var(--caution);">2 Moderate</div>
+        </div>
+      </div>
+      <div class="risk-bar"><div class="risk-fill" style="width:68%;"></div></div>
+      <div class="risk-zones"><span class="rz g">Low</span><span class="rz n">Moderate</span><span class="rz r">High</span></div>
+      <div style="margin-top:12px;">
+        <div class="geo-event">
+          <div class="geo-reg">Middle East · Energy</div>
+          <div class="geo-title">Iran–Israel escalation — Hormuz risk elevated</div>
+          <div class="geo-chips"><div class="gc gc-n">Oil +2.1%</div><div class="gc gc-n">Aviation -2.8%</div><div class="gc gc-p">Defence +2.1%</div></div>
+        </div>
+        <div class="geo-event">
+          <div class="geo-reg">US–China · Trade Policy</div>
+          <div class="geo-title">60% US tariffs on Chinese electronics</div>
+          <div class="geo-chips"><div class="gc gc-p">IT +2.6%</div><div class="gc gc-p">PLI +2.2%</div><div class="gc gc-n">Chem -0.8%</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-section">
+      <div class="side-lbl">Your Record</div>
+      <div class="stats-row">
+        <div class="stat"><div class="stat-val g">61%</div><div class="stat-key">Accuracy</div></div>
+        <div class="stat"><div class="stat-val">44</div><div class="stat-key">Calls</div></div>
+        <div class="stat"><div class="stat-val">3,200</div><div class="stat-key">XP</div></div>
+      </div>
+      <div style="font-family:var(--plex);font-size:8px;color:var(--dim);line-height:1.7;">Expert tier · 3× vote weight · Rank #312 · 14-day streak</div>
+    </div>
+
+    <div class="side-section" style="border-bottom:none;">
+      <div style="font-family:var(--plex);font-size:8px;color:var(--dim);line-height:1.8;">Pulse.IN shows crowd sentiment only. Groq AI analysis is educational context — not investment advice. Not registered with SEBI. Built with Groq AI (Llama 3.3 70B).</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const TOPICS=[
+  {id:0,title:'TCS wins $1.2B AI contract with European bank — will the stock outperform?',sig:'bullish',sec:'IT',src:'Economic Times',bull:68,bear:24,watch:8,v:4211,eBull:81,aBull:71,cBull:54},
+  {id:1,title:'India CPI at 6.2% — HUL and Nestle face structural margin compression in rural segments',sig:'bearish',sec:'FMCG',src:'Business Standard',bull:28,bear:65,watch:7,v:3087,eBull:21,aBull:30,cBull:42},
+  {id:2,title:'RBI rate pause signal — HDFC Bank and ICICI positioned for NIM recovery',sig:'bullish',sec:'Banking',src:'Mint',bull:72,bear:20,watch:8,v:2890,eBull:84,aBull:72,cBull:58},
+  {id:3,title:'Reliance Jio IPO preliminary filing — expert caution diverges from retail optimism',sig:'neutral',sec:'Energy',src:'Reuters',bull:52,bear:34,watch:14,v:7902,eBull:48,aBull:55,cBull:74},
+];
+
+const DEMO={
+  0:'TCS contract wins of this scale signal strong AI pipeline momentum and enterprise confidence in Indian IT delivery. The crowd is 68% bullish with expert voters at 81% — a high-conviction signal. This is crowd context only, not investment advice.',
+  1:'Persistent CPI at 6.2% creates headwinds for FMCG staples as rural demand weakens and input costs stay elevated. Expert voters are only 21% bullish, diverging sharply from casual voters at 42%. This is crowd context only, not investment advice.',
+  2:'A rate pause removes the primary NIM compression overhang for private banks. Expert voters are 84% bullish — the highest expert conviction reading this week across all topics. This is crowd context only, not investment advice.',
+  3:'The 26pt expert-casual divergence (expert 48% vs casual 74% bullish) is a high-signal indicator. Historically, when this gap exceeds 20pts, the expert direction has been correct in approximately 83% of cases. This is crowd context only, not investment advice.'
+};
+
+let apiKey=localStorage.getItem('pulsein_groq_key')||'';
+let demoMode=false;
+const votes={}, cache={};
+
+function saveKey(){
+  const k=document.getElementById('api-key-input').value.trim();
+  if(!k.startsWith('gsk_')){alert('Please enter a valid Groq API key starting with gsk_');return;}
+  apiKey=k;localStorage.setItem('pulsein_groq_key',k);
+  document.getElementById('modal').classList.add('hidden');
+  document.getElementById('groq-status').textContent='Groq AI Connected';
+  renderFeed();
+}
+function skipKey(){
+  demoMode=true;
+  document.getElementById('modal').classList.add('hidden');
+  document.getElementById('groq-status').textContent='Demo Mode';
+  renderFeed();
+}
+
+async function callGroq(prompt){
+  if(!apiKey||demoMode)return null;
+  const r=await fetch('https://api.groq.com/openai/v1/chat/completions',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
+    body:JSON.stringify({
+      model:'llama-3.3-70b-versatile',
+      messages:[
+        {role:'system',content:'You are a market education assistant for Pulse.IN, an Indian stock market crowd sentiment platform. Answer in 2-3 sentences only. Be factual and educational. Never say recommend, buy, sell, or invest. Always end with: This is crowd context only, not investment advice.'},
+        {role:'user',content:prompt}
+      ],
+      max_tokens:200,
+      temperature:0.3
+    })
+  });
+  if(!r.ok){const e=await r.json();throw new Error(e.error?.message||`HTTP ${r.status}`);}
+  const d=await r.json();
+  return d.choices?.[0]?.message?.content||null;
+}
+
+async function getAnalysis(t){
+  if(cache[t.id])return cache[t.id];
+  if(demoMode)return DEMO[t.id]||`The crowd shows a ${t.sig} signal on this ${t.sec} topic. This is crowd context only, not investment advice.`;
+  const text=await callGroq(`Topic: "${t.title}"\nSector: ${t.sec}\nCrowd: ${t.bull}% bullish, ${t.bear}% bearish\nSource: ${t.src}\n\nWhat does this mean for Indian market crowd sentiment?`);
+  if(text)cache[t.id]=text;
+  return text;
+}
+
+function sc(s){return s==='bullish'?'bull':s==='bearish'?'bear':'neu';}
+function sl(s){return s==='bullish'?'Bullish Signal':s==='bearish'?'Bearish Signal':'Neutral';}
+function stc(s){return s==='bullish'?'sig-bull':s==='bearish'?'sig-bear':'sig-neu';}
+
+function buildCard(t){
+  const v=votes[t.id];
+  const bottom=!v?`
+    <div class="vote-section">
+      <div class="vote-hint">Vote to unlock crowd breakdown</div>
+      <div class="vote-btns">
+        <button class="vbtn vbull" onclick="castVote(${t.id},'bullish')">Bullish</button>
+        <button class="vbtn vbear" onclick="castVote(${t.id},'bearish')">Bearish</button>
+        <button class="vbtn vwtch" onclick="castVote(${t.id},'watch')">Watch</button>
+      </div>
+    </div>
+    <div class="locked"><div class="locked-lbl">Results Locked</div><div class="locked-sub">Cast your vote to reveal the weighted crowd breakdown and tier sentiment analysis</div></div>`:`
+    <div class="results-section">
+      <div class="rs-hdr"><div class="rs-lbl">Crowd Breakdown Unlocked</div><div class="rs-yv" style="color:${v==='bullish'?'var(--accent)':v==='bearish'?'var(--loss)':'var(--mid)'};">You: ${v.charAt(0).toUpperCase()+v.slice(1)}</div></div>
+      <div class="sent-bar"><div class="sb-b" style="width:${t.bull}%;"></div><div class="sb-w" style="width:${t.watch}%;"></div><div class="sb-r" style="width:${t.bear}%;"></div></div>
+      <div class="sent-lbls"><span class="sl g">Bull ${t.bull}%</span><span class="sl" style="color:var(--dim);">${t.v.toLocaleString('en-IN')} voters</span><span class="sl r">Bear ${t.bear}%</span></div>
+      <div class="tier-lbl">Breakdown by voter tier</div>
+      <div class="trow"><div class="tnm">Expert</div><div class="twt">3×</div><div class="ttrack"><div class="tfill" style="width:${t.eBull}%;background:var(--caution);"></div></div><div class="tpct n">${t.eBull}%</div></div>
+      <div class="trow"><div class="tnm">Active</div><div class="twt">1.5×</div><div class="ttrack"><div class="tfill" style="width:${t.aBull}%;background:var(--accent);"></div></div><div class="tpct g">${t.aBull}%</div></div>
+      <div class="trow"><div class="tnm">Casual</div><div class="twt">1×</div><div class="ttrack"><div class="tfill" style="width:${t.cBull}%;background:var(--dim);"></div></div><div class="tpct" style="color:var(--dim);">${t.cBull}%</div></div>
+      ${Math.abs(t.eBull-t.cBull)>=20?`<div class="div-alert"><div class="da-lbl">Expert–Crowd Divergence: ${Math.abs(t.eBull-t.cBull)}pt</div><div class="da-txt">When divergence exceeds 20pts, expert tier direction accuracy historically rises to ~83%.</div></div>`:''}
+    </div>`;
+  return`<div class="topic-card ${sc(t.sig)}" id="card-${t.id}">
+    <div class="tc-body">
+      <div class="tc-meta"><div class="tc-sig ${stc(t.sig)}">${sl(t.sig)}</div><div class="tc-sector">${t.sec}</div><div class="tc-src">${t.src}</div></div>
+      <div class="tc-title">${t.title}</div>
+      <div class="groq-panel" id="groq-${t.id}">
+        <div class="gp-hdr"><div class="gp-lbl">Groq AI Analysis</div><div class="gp-mdl">llama-3.3-70b</div></div>
+        <div class="gp-load"><div class="gp-dots"><div class="gp-dot"></div><div class="gp-dot"></div><div class="gp-dot"></div></div><div class="gp-load-txt">Analysing with Groq...</div></div>
+      </div>
+    </div>
+    ${bottom}
+  </div>`;
+}
+
+function renderFeed(){
+  const c={...cache};
+  document.getElementById('feed').innerHTML=TOPICS.map(buildCard).join('');
+  Object.assign(cache,c);
+  TOPICS.forEach(t=>loadAI(t));
+}
+
+async function loadAI(t){
+  const panel=document.getElementById(`groq-${t.id}`);if(!panel)return;
+  try{
+    const text=await getAnalysis(t);
+    if(text){
+      panel.innerHTML=`<div class="gp-hdr"><div class="gp-lbl">Groq AI Analysis</div><div class="gp-mdl">llama-3.3-70b · ${demoMode?'demo':'live'}</div></div><div class="gp-txt">${text}</div><div class="gp-disc">Educational context only · Not investment advice · Not SEBI registered</div>`;
+    }else{
+      panel.innerHTML=`<div class="gp-hdr"><div class="gp-lbl">Groq AI Analysis</div><div class="gp-mdl">No key</div></div><div class="no-key"><div class="no-key-txt">Add your free Groq API key to see live AI analysis. Click "API Key" above → get a free key at console.groq.com — no credit card needed, takes 30 seconds.</div></div>`;
+    }
+  }catch(e){
+    panel.innerHTML=`<div class="gp-hdr"><div class="gp-lbl">Groq AI Analysis</div></div><div class="gp-err">Error: ${e.message} — check your API key or refresh.</div>`;
+  }
+}
+
+function castVote(id,vote){
+  votes[id]=vote;
+  const c={...cache};renderFeed();Object.assign(cache,c);
+  TOPICS.forEach(t=>loadAI(t));
+}
+
+async function askGroq(){
+  const q=document.getElementById('ask-input').value.trim();if(!q)return;
+  const btn=document.getElementById('ask-btn');
+  const resp=document.getElementById('ask-resp');
+  const txt=document.getElementById('ask-resp-txt');
+  btn.disabled=true;btn.textContent='Analysing...';resp.classList.remove('show');
+  try{
+    let answer;
+    if(demoMode||!apiKey){
+      await new Promise(r=>setTimeout(r,800));
+      answer=`This is an important question about Indian market dynamics. Based on historical crowd sentiment patterns, such macro events typically create both headwinds and tailwinds across related sectors. The Pulse.IN weighted crowd model — which gives 3× weight to Expert tier voters with 70%+ accuracy — helps surface higher-conviction signals. This is educational context only, not investment advice.`;
+    }else{
+      answer=await callGroq(`A user of Pulse.IN (Indian stock market crowd sentiment platform) asks: "${q}"\n\nAnswer in 3-4 sentences. Be factual about Indian markets. End with: This is educational context only, not investment advice.`);
+    }
+    txt.textContent=answer;resp.classList.add('show');
+  }catch(e){txt.textContent=`Error: ${e.message}`;resp.classList.add('show');}
+  btn.disabled=false;btn.textContent='Analyse';
+}
+
+window.addEventListener('load',()=>{
+  if(apiKey){
+    document.getElementById('modal').classList.add('hidden');
+    document.getElementById('groq-status').textContent='Groq AI Connected';
+    renderFeed();
+  }
+  document.getElementById('ask-input').addEventListener('keydown',e=>{
+    if(e.key==='Enter'&&(e.ctrlKey||e.metaKey))askGroq();
+  });
+});
+</script>
+</body>
+</html>
