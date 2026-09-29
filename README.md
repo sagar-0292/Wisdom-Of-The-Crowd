@@ -14,6 +14,5 @@ A mobile-first, installable web app (PWA) for tracking group trip expenses.
 - Works offline, data stays on the device (localStorage), dark mode
 
 **Run locally:** `cd trip-expense-tracker && python3 -m http.server 8000`, then open `http://<your-computer-ip>:8000` on your phone.
-**Publish it (one-time):** in the GitHub repo go to *Settings → Pages → Build and deployment → Source* and pick **GitHub Actions**.
-Every push to `main` that touches `trip-expense-tracker/` then deploys it to
-`https://sagar-0292.github.io/Wisdom-Of-The-Crowd/`. Open that on your phone and choose "Add to Home Screen".
+**Live app:** https://sagar-0292.github.io/Wisdom-Of-The-Crowd/trip-expense-tracker/ (GitHub Pages publishes `main` automatically).
+Open it on your phone and choose "Add to Home Screen".
