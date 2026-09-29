@@ -372,7 +372,7 @@ function renderSettle(t){
       <button class="btn sm ghost" onclick="recordPayment(${i})">Mark paid</button></div>`).join('')
     : `<div class="empty" style="padding:20px"><div class="e">🎉</div><h3>All settled up</h3><p class="small">Nobody owes anything.</p></div>`;
   $('main').innerHTML = `<div class="section-title">Suggested payments</div><div class="card" style="padding:4px 16px">${txHtml}</div>
-    ${tx.length ? `<button class="btn ghost" onclick="shareSummary()">Share with the group</button>` : ''}
+    <div class="two"><button class="btn ghost" onclick="openShareTrip()">🔗 Sync trip</button>${tx.length ? `<button class="btn ghost" onclick="shareSummary()">📤 Share summary</button>` : '<span></span>'}</div>
     <div class="section-title">Balances</div><div class="card" style="padding:0 16px">${bal}</div>
     <p class="small muted" style="padding:0 4px">Balances = what each person paid minus their share. "Mark paid" logs the payment so balances update.</p>`;
 }
@@ -461,10 +461,10 @@ function saveTrip(editId){
   if(budgetRaw && !(budget > 0)) return toast('Budget must be a positive number');
   if(editId){
     const t = state.trips.find(x => x.id === editId);
-    Object.assign(t, {name, currency:$('fCur').value, budget, members:draftMembers});
+    Object.assign(t, {name, currency:$('fCur').value, budget, members:draftMembers, updatedAt:Date.now()});
     save(); closeSheet(); render(); toast('Trip updated');
   } else {
-    const t = {id:uid(), name, currency:$('fCur').value, budget, members:draftMembers, expenses:[], createdAt:Date.now()};
+    const t = {id:uid(), name, currency:$('fCur').value, budget, members:draftMembers, expenses:[], deleted:[], createdAt:Date.now(), updatedAt:Date.now()};
     state.trips.push(t); save(); closeSheet(); openTrip(t.id);
   }
 }
@@ -526,7 +526,7 @@ function saveExpense(editId){
   const splitAmong = t.members.map(m => m.id).filter(id => draft.splitAmong.includes(id)); // keep member order
   if(!splitAmong.length) return toast('Pick at least one person to split with');
   if(isPay && splitAmong[0] === paidBy) return toast('Payer and receiver must differ');
-  const data = {title, amount, category:draft.category, paidBy, splitAmong, date:$('eDate').value || todayISO(), note:$('eNote').value.trim()};
+  const data = {updatedAt:Date.now(), title, amount, category:draft.category, paidBy, splitAmong, date:$('eDate').value || todayISO(), note:$('eNote').value.trim()};
   if(editId) Object.assign(t.expenses.find(x => x.id === editId), data);
   else t.expenses.push({id:uid(), createdAt:Date.now(), ...data});
   t.lastPaidBy = paidBy;
@@ -535,13 +535,14 @@ function saveExpense(editId){
 function deleteExpense(id){
   if(!confirm('Delete this expense?')) return;
   const t = trip(); t.expenses = t.expenses.filter(e => e.id !== id);
+  (t.deleted ||= []).push(id); // remembered so the deletion carries over when copies are merged
   save(); closeSheet(); render(); toast('Deleted');
 }
 function recordPayment(i){
   const t = trip(), x = settlements(stats(t).balance)[i];
   if(!x) return;
   if(!confirm(`Record that ${member(t, x.from).name} paid ${member(t, x.to).name} ${fmt(x.amount, t.currency)}?`)) return;
-  t.expenses.push({id:uid(), createdAt:Date.now(), title:`${member(t, x.from).name} → ${member(t, x.to).name}`, amount:x.amount,
+  t.expenses.push({id:uid(), createdAt:Date.now(), updatedAt:Date.now(), title:`${member(t, x.from).name} → ${member(t, x.to).name}`, amount:x.amount,
     category:'settlement', paidBy:x.from, splitAmong:[x.to], date:todayISO(), note:''});
   save(); render(); toast('Payment recorded');
 }
@@ -551,7 +552,8 @@ function openTripMenu(){
   const t = trip();
   openSheet(`<h2 class="ellip">${esc(t.name)}</h2>
     <button class="menu-item" onclick="closeSheet();setTimeout(()=>openTripForm('${t.id}'),220)">✏️ Edit trip, budget & travellers</button>
-    <button class="menu-item" onclick="shareSummary()">📤 Share summary</button>
+    <button class="menu-item" onclick="openShareTrip()">🔗 Share trip with the group</button>
+    <button class="menu-item" onclick="shareSummary()">📤 Share summary as text</button>
     <button class="menu-item" onclick="exportCSV()">📊 Export expenses (CSV)</button>
     <button class="menu-item danger" onclick="deleteTrip()">🗑️ Delete trip</button>`);
 }
@@ -559,6 +561,7 @@ function openAppMenu(){
   openSheet(`<h2>TripSplit</h2>
     <button class="menu-item" onclick="exportBackup()">💾 Back up all trips (JSON)</button>
     <button class="menu-item" onclick="$('importFile').click()">📥 Restore from backup</button>
+    <button class="menu-item" onclick="shareApp()">💌 Invite friends to TripSplit</button>
     <button class="menu-item" onclick="installHelp()">📱 Install on home screen</button>
     <p class="small muted" style="margin-top:12px">Your data stays on this device only. Back up regularly if you switch phones or clear your browser.</p>`);
 }
@@ -625,9 +628,142 @@ function installHelp(){
 let deferredInstall = null;
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; });
 
+/* ---------- trip sharing (no server: the trip travels inside the link) ---------- */
+function packTrip(t){
+  const ix = new Map(t.members.map((m, i) => [m.id, i]));
+  return {v:1, i:t.id, n:t.name, c:t.currency, b:t.budget || 0, k:t.createdAt, u:t.updatedAt || 0,
+    m:t.members.map(m => [m.id, m.name]), d:t.deleted || [],
+    e:t.expenses.map(e => [e.id, e.title, e.amount, e.category, ix.get(e.paidBy), e.splitAmong.map(id => ix.get(id)),
+      e.date, e.note || '', e.createdAt, e.updatedAt || e.createdAt])};
+}
+function unpackTrip(p){
+  if(!p || p.v !== 1 || !p.i || !Array.isArray(p.m) || !Array.isArray(p.e)) throw new Error('bad trip');
+  const members = p.m.map(([id, name]) => ({id:String(id), name:String(name).slice(0,30)}));
+  const mid = i => members[i]?.id;
+  const expenses = p.e.map(([id, title, amount, category, payer, split, date, note, createdAt, updatedAt]) => ({
+    id:String(id), title:String(title).slice(0,80), amount:Math.round(+amount), category:String(category),
+    paidBy:mid(payer), splitAmong:(split || []).map(mid).filter(Boolean), date:String(date).slice(0,10),
+    note:String(note || '').slice(0,140), createdAt:+createdAt || 0, updatedAt:+updatedAt || 0}))
+    .filter(e => e.amount > 0 && e.paidBy && e.splitAmong.length);
+  return {id:String(p.i), name:String(p.n).slice(0,60), currency:String(p.c), budget:+p.b || 0, createdAt:+p.k || Date.now(),
+    updatedAt:+p.u || 0, members, expenses, deleted:(p.d || []).map(String)};
+}
+const b64url = bytes => { let s = ''; for(let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
+const unb64url = str => Uint8Array.from(atob(str.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+async function encodeTrip(t){
+  const json = new TextEncoder().encode(JSON.stringify(packTrip(t)));
+  if('CompressionStream' in window){
+    const out = await new Response(new Blob([json]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer();
+    return 'z' + b64url(new Uint8Array(out));
+  }
+  return 'j' + b64url(json);
+}
+async function decodeTrip(str){
+  let bytes = unb64url(str.slice(1));
+  if(str[0] === 'z') bytes = new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
+  else if(str[0] !== 'j') throw new Error('bad link');
+  return unpackTrip(JSON.parse(new TextDecoder().decode(bytes)));
+}
+const appURL = () => location.href.split('#')[0].split('?')[0];
+
+// Merge an incoming copy into ours: union of people and expenses, newest edit wins, deletions win.
+function mergeTrip(local, inc){
+  const deleted = new Set([...(local.deleted || []), ...inc.deleted]);
+  const members = new Map(local.members.map(m => [m.id, m]));
+  inc.members.forEach(m => { if(!members.has(m.id)) members.set(m.id, m); });
+  if(inc.updatedAt > (local.updatedAt || 0)){
+    Object.assign(local, {name:inc.name, currency:inc.currency, budget:inc.budget, updatedAt:inc.updatedAt});
+    inc.members.forEach(m => members.get(m.id).name = m.name);
+  }
+  const ex = new Map(local.expenses.map(e => [e.id, e]));
+  let added = 0, updated = 0;
+  inc.expenses.forEach(e => {
+    const cur = ex.get(e.id);
+    if(deleted.has(e.id)) return;
+    if(!cur){ ex.set(e.id, e); added++; }
+    else if(e.updatedAt > (cur.updatedAt || cur.createdAt || 0)){ ex.set(e.id, e); updated++; }
+  });
+  const before = local.expenses.length + added;
+  local.members = [...members.values()];
+  local.deleted = [...deleted];
+  local.expenses = [...ex.values()].filter(e => !deleted.has(e.id));
+  return {added, updated, removed:before - local.expenses.length};
+}
+
+async function openShareTrip(){
+  const t = trip();
+  let link;
+  try{ link = appURL() + '#trip=' + await encodeTrip(t); }catch(e){ return toast('Could not create link'); }
+  openSheet(`<h2>Share “${esc(t.name)}”</h2>
+    <p class="muted">Send this link to your group (WhatsApp, SMS…). Anyone who opens it gets a copy of the trip with all ${t.expenses.length} entries.</p>
+    <div class="card" style="background:var(--bg);box-shadow:none;margin:14px 0">
+      <div class="small"><b>Keeping everyone in sync</b></div>
+      <div class="small muted" style="margin-top:4px">When someone adds expenses, they tap <b>Sync trip</b> and send their link back.
+      Opening it merges the changes — nothing is lost or duplicated.</div></div>
+    <button class="btn" onclick="sendTripLink()">🔗 Send link</button>
+    <button class="btn ghost" style="margin-top:8px" onclick="copyTripLink()">Copy link</button>
+    <p class="hint" style="text-align:center">${link.length.toLocaleString()} characters · data lives in the link, not on a server</p>`);
+  openShareTrip.link = link;
+}
+async function sendTripLink(){
+  const t = trip(), url = openShareTrip.link;
+  if(navigator.share){
+    try{ await navigator.share({title:`${t.name} – TripSplit`, text:`Here are our expenses for “${t.name}”. Open to view & add yours:`, url}); closeSheet(); return; }
+    catch(e){ if(e.name === 'AbortError') return; }
+  }
+  copyTripLink();
+}
+async function copyTripLink(){
+  try{ await navigator.clipboard.writeText(openShareTrip.link); closeSheet(); toast('Link copied — paste it in your group chat'); }
+  catch(e){ prompt('Copy this link:', openShareTrip.link); }
+}
+async function shareApp(){
+  const url = appURL();
+  closeSheet();
+  if(navigator.share){ try{ await navigator.share({title:'TripSplit', text:'Track and split our trip expenses with TripSplit:', url}); return; }catch(e){ if(e.name === 'AbortError') return; } }
+  try{ await navigator.clipboard.writeText(url); toast('App link copied'); }catch(e){ prompt('Copy this link:', url); }
+}
+
+let incomingTrip = null;
+async function checkIncomingLink(){
+  const m = location.hash.match(/^#trip=([\w-]+)$/);
+  if(!m) return;
+  history.replaceState(null, '', appURL()); // don't re-import on reload
+  try{ incomingTrip = await decodeTrip(m[1]); }
+  catch(e){ return toast('This share link is broken or incomplete'); }
+  const t = incomingTrip, mine = state.trips.find(x => x.id === t.id);
+  const total = t.expenses.filter(e => e.category !== 'settlement').reduce((a, e) => a + e.amount, 0);
+  openSheet(`<h2>${mine ? 'Update from the group' : 'Trip shared with you'}</h2>
+    <div class="card" style="background:var(--bg);box-shadow:none">
+      <div class="row"><div class="grow"><h3 class="ellip">${esc(t.name)}</h3>
+      <div class="small muted">${t.members.map(m => esc(m.name)).join(', ')}</div></div><div class="amt">${fmt(total, t.currency)}</div></div>
+      <div class="small muted" style="margin-top:6px">${t.expenses.length} entries</div></div>
+    <p class="muted small" style="margin:4px 0 14px">${mine
+      ? 'You already have this trip. Merging adds their new and edited expenses to yours — nothing of yours is lost.'
+      : 'Save it to your trips to view the split and add your own expenses.'}</p>
+    <button class="btn" onclick="acceptIncoming()">${mine ? 'Merge changes' : 'Add to my trips'}</button>
+    <button class="btn ghost" style="margin-top:8px" onclick="incomingTrip=null;closeSheet()">Not now</button>`);
+}
+function acceptIncoming(){
+  const inc = incomingTrip; incomingTrip = null;
+  if(!inc) return;
+  const mine = state.trips.find(x => x.id === inc.id);
+  let msg;
+  if(mine){
+    const r = mergeTrip(mine, inc);
+    msg = r.added || r.updated || r.removed
+      ? [r.added && `${r.added} added`, r.updated && `${r.updated} updated`, r.removed && `${r.removed} removed`].filter(Boolean).join(', ')
+      : 'Already up to date';
+  } else { state.trips.push(inc); msg = 'Trip added'; }
+  save(); closeSheet(); openTrip(inc.id); toast(msg);
+}
+window.addEventListener('hashchange', checkIncomingLink);
+
 /* ---------- boot ---------- */
-history.replaceState(null, '');
+if(!location.hash) history.replaceState(null, '');
 render();
+checkIncomingLink();
 if('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>
 </body>
