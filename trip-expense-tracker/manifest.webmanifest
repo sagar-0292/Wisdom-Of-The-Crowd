@@ -1,0 +1,14 @@
+{
+  "name": "TripSplit — Trip Expense Tracker",
+  "short_name": "TripSplit",
+  "description": "Track trip expenses, budgets and who owes whom.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f6f7f5",
+  "theme_color": "#0f766e",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
